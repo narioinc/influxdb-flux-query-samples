@@ -1,0 +1,25 @@
+import "experimental"
+
+from(bucket: "NOAA_water_database")
+  |> range(start: dashboardTime)
+  |> filter(fn: (r) => r._measurement == "h2o_quality")
+  |> elapsed(unit: 1s)
+
+|> duplicate(column: "_time", as: "toTime")
+|> duplicate(column: "_time", as: "fromTime")
+|> map(fn: (r) => ({ 
+  r with 
+  fromTime: experimental.subDuration(d: duration(v: string(v: r.elapsed)+"s"), from: r.toTime)
+}))
+   
+ 
+  |> map(fn: (r) => 
+  ({ 
+  r with 
+  q_val: 
+  if r.elapsed > 1080 then "OFFLINE"
+  else "ONLINE"
+  }))
+  |> stateCount(fn: (r) => r.q_val == "OFFLINE", column: "offStateCount")
+  |> stateCount(fn: (r) => r.q_val == "ONLINE", column: "onStateCount")
+  |> filter(fn: (r) => (r.offStateCount <= 1) and (r.onStateCount <= 1))
